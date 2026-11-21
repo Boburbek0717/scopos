@@ -42,7 +42,7 @@ a:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible
 .sidebar h2 { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 10px 14px 4px; }
 .sidebar a { display: block; padding: 7px 14px; color: var(--ink); text-decoration: none; font-size: 14px; }
 .sidebar a:hover { background: #f1f4f8; }
-.sidebar a[aria-current="page"] { background: #e5ecf5; color: var(--navy); font-weight: 700; border-left: 3px solid var(--navy); padding-left: 11px; }
+.sidebar a[aria-current="page"] { background: #e5ecf5; color: var(--navy); font-weight: 700; }
 
 main { min-width: 0; }
 .crumbs { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
