@@ -2,12 +2,12 @@ name = "scopos-proxy"
 main = "worker.js"
 compatibility_date = "2026-06-01"
 
-# 10 requests a minute per network. The spend limit on the key's
+# 60 requests a minute per network (a hackathon Wi-Fi can put many people behind one address). The spend limit on the key's
 # Anthropic workspace is the real budget cap.
 [[ratelimits]]
 name = "LIMITER"
 namespace_id = "1001"
 
   [ratelimits.simple]
-  limit = 10
+  limit = 60
   period = 60

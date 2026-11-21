@@ -98,7 +98,7 @@ scripts/
 
 ## Demo server
 
-[`proxy/worker.js`](proxy/worker.js) is a Cloudflare Worker that holds one Anthropic API key, so anyone can try Scopos without their own. It doesn't forward what the browser sends: it builds every request itself from the Scopos prompt and step schema, and takes only the model and the page description from the client. It allows 10 requests a minute per network, and the key sits in an Anthropic workspace with a hard spend limit.
+[`proxy/worker.js`](proxy/worker.js) is a Cloudflare Worker that holds one Anthropic API key, so anyone can try Scopos without their own. It doesn't forward what the browser sends: it builds every request itself from the Scopos prompt and step schema, and takes only the model and the page description from the client. It allows 60 requests a minute per network (a shared event Wi-Fi can look like one network), and the key sits in an Anthropic workspace with a hard spend limit.
 
 To run your own:
 
