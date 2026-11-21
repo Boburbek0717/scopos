@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Scopos</title>
+<style>
+  :root {
+    --bg: #171918;
+    --raised: #202221;
+    --field: #272a29;
+    --border: #373b39;
+    --ink: #eceeed;
+    --muted: #adb5b2;
+    --faint: #8f9793;
+    --accent: #2563eb;
+    --accent-hover: #1d4ed8;
+    --ok: #34d399;
+    --warn: #ffb224;
+    --danger: #f87171;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    width: 340px;
+    background: var(--bg);
+    color: var(--ink);
+    font: 13px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { display: flex; flex-direction: column; gap: 16px; padding: 16px; }
+
+  header { display: flex; align-items: center; gap: 10px; }
+  header svg { width: 26px; height: 26px; filter: drop-shadow(0 2px 6px rgba(37, 99, 235, 0.5)); }
+  header h1 { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+  header p { font-size: 12px; color: var(--muted); }
+
+  section { display: flex; flex-direction: column; gap: 8px; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  label, .label { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+
+  textarea, input, select {
+    width: 100%;
+    background: var(--field);
+    color: var(--ink);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font: inherit;
+  }
+  textarea { resize: none; min-height: 64px; }
+  textarea::placeholder, input::placeholder { color: var(--faint); }
+  textarea:focus-visible, input:focus-visible, select:focus-visible, button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  button {
+    border: 1px solid var(--border);
+    background: var(--raised);
+    color: var(--ink);
+    border-radius: 8px;
+    padding: 7px 12px;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  button:hover { background: var(--field); }
+  button:disabled { opacity: 0.55; cursor: default; }
+  .primary { background: var(--accent); border-color: var(--accent); color: #fff; padding: 9px 12px; }
+  .primary:hover:not(:disabled) { background: var(--accent-hover); }
+  .link { background: none; border: none; padding: 0; color: var(--muted); font-weight: 500; text-decoration: underline; }
+  .link:hover { background: none; color: var(--ink); }
+
+  .key-row { display: flex; gap: 8px; }
+  .chip { font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 99px; }
+  .chip.ok { color: var(--ok); background: rgba(52, 211, 153, 0.12); }
+  .chip.needed { color: var(--warn); background: rgba(255, 178, 36, 0.12); }
+
+  .status { min-height: 18px; font-size: 12px; color: var(--muted); }
+  .status.error { color: var(--danger); }
+  .hint { font-size: 12px; color: var(--faint); }
+  .hint a { color: var(--muted); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <svg viewBox="0 0 48 48" aria-hidden="true">
+      <defs>
+        <linearGradient id="g" x1="10%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#e0f2fe"/>
+          <stop offset="50%" stop-color="#7dd3fc"/>
+          <stop offset="100%" stop-color="#2563eb"/>
+        </linearGradient>
+      </defs>
+      <polygon points="4,4 34,14 14,32" fill="url(#g)" stroke="url(#g)" stroke-width="3" stroke-linejoin="round"/>
+    </svg>
+    <div>
+      <h1>Scopos</h1>
+      <p>Tell me where you want to go. I'll point the way.</p>
+    </div>
+  </header>
+
+  <form id="guideForm">
+    <section>
+      <label for="goal">Your goal</label>
+      <textarea id="goal" maxlength="500" placeholder="Guide me to the exam registration page" required></textarea>
+      <button id="guideBtn" class="primary" type="submit">Guide Me</button>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+    </section>
+  </form>
+
+  <section>
+    <label for="model">Model</label>
+    <select id="model">
+      <optgroup label="Anthropic (Claude)">
+        <option value="claude-opus-5-5">Claude Opus 5.5 · most accurate</option>
+        <option value="claude-sonnet-5-5">Claude Sonnet 5.5 · faster</option>
+        <option value="claude-haiku-5-5">Claude Haiku 5.5 · fastest, cheapest</option>
+      </optgroup>
+    </select>
+  </section>
+
+  <section>
+    <div class="row">
+      <span class="label" id="keyLabel">Anthropic API key</span>
+      <span id="keyChip" class="chip needed">Needed</span>
+    </div>
+    <form id="keyForm" class="key-row">
+      <input id="apiKey" type="password" autocomplete="off" spellcheck="false" aria-labelledby="keyLabel" placeholder="sk-ant-…">
+      <button type="submit">Save</button>
+    </form>
+    <p id="demoNote" class="hint" hidden>No key needed: Scopos uses a free demo key. Add your own if the demo budget runs out.</p>
+    <div class="row">
+      <p class="hint">Get one at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a></p>
+      <button id="removeKey" class="link" type="button" hidden>Remove key</button>
+    </div>
+  </section>
+
+  <p class="hint">Scopos sends this page's buttons, links and field labels to Claude. What you type into fields is never sent.</p>
+</main>
+<script src="config.js"></script>
+<script src="popup.js"></script>
+</body>
+</html>

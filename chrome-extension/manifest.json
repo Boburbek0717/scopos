@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Scopos",
+  "version": "1.0.0",
+  "description": "Tell Scopos where you want to go on a website, and a blue cursor walks you there one step at a time.",
+  "minimum_chrome_version": "116",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "host_permissions": ["https://api.anthropic.com/*", "https://scopos-proxy.boburbek.workers.dev/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Scopos",
+    "default_icon": {
+      "16": "icons/16.png",
+      "32": "icons/32.png"
+    }
+  },
+  "icons": {
+    "16": "icons/16.png",
+    "32": "icons/32.png"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
+}
