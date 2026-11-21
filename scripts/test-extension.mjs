@@ -24,7 +24,8 @@ function makeWorld({ stored, fetchReply, scan, demoProxyUrl = '' }) {
   const badges = {};
   const sessionStore = {};
   const access = { allowed: true }; // flip to false to act like a page Scopos can't open
-  const page = { sameDocument: false }; // true: the old overlay is still there to answer
+  // sameDocument: the old overlay is still there to answer. url: what the tab shows now.
+  const page = { sameDocument: false, url: 'https://uni.example/home' };
   let listener;
   let onUpdated;
   const chrome = {
@@ -48,8 +49,9 @@ function makeWorld({ stored, fetchReply, scan, demoProxyUrl = '' }) {
           throw new Error('Could not establish connection. Receiving end does not exist.');
         }
         sentToTab.push(plain(message));
-        return message.type === 'SCOPOS_SCAN' ? scan : { ok: true };
+        return message.type === 'SCOPOS_SCAN' ? { ...scan, url: page.url } : { ok: true };
       },
+      get: async (tabId) => ({ id: tabId, url: page.url }),
       onUpdated: { addListener: (fn) => { onUpdated = fn; } },
       onRemoved: { addListener: () => {} },
     },
@@ -222,23 +224,41 @@ const stepsReply = reply(200, {
   await new Promise((resolve) => setTimeout(resolve, 50));
   assert.equal(world.requests.length, 3, 'a rescan plans the redrawn page');
   assert.match(world.requests[2].body.messages[0].content, /earlier pages in this walkthrough:/);
+  world.fromTab({ type: 'SCOPOS_RESCAN' });
+  world.fromTab({ type: 'SCOPOS_RESCAN' });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(world.requests.length, 4, 'one more look for the newly planned page, then no more');
+  world.fromTab({ type: 'SCOPOS_RESCAN' });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(world.requests.length, 5);
 
   // A page Scopos can't open: the icon badge asks for a click, and the popup's click continues.
   world.access.allowed = false;
   await world.navigate();
-  assert.equal(world.requests.length, 3);
+  assert.equal(world.requests.length, 5);
   assert.equal(world.badges[7], '→');
   assert.deepEqual(await world.guide({ type: 'SCOPOS_STATUS', tabId: 7 }), { waiting: true, goal: 'apply for exams' });
   world.access.allowed = true;
   assert.equal((await world.guide({ type: 'SCOPOS_CONTINUE', tabId: 7 })).ok, true);
-  assert.equal(world.requests.length, 4);
+  assert.equal(world.requests.length, 6);
   assert.equal(world.badges[7], '');
+
+  // Another site in the same tab: not read without a click on the icon; after that it's followed too.
+  world.page.url = 'https://sso.example/login';
+  await world.navigate();
+  assert.equal(world.requests.length, 6, 'a new site is not read without a click');
+  assert.equal(world.badges[7], '→');
+  assert.equal((await world.guide({ type: 'SCOPOS_CONTINUE', tabId: 7 })).ok, true);
+  assert.equal(world.requests.length, 7);
+  await world.navigate();
+  assert.equal(world.requests.length, 8, 'once the user continued there, that site is followed too');
+  world.page.url = 'https://uni.example/home';
 
   // Stop on the page ends it: the next page load stays quiet.
   world.fromTab({ type: 'SCOPOS_END' });
   await new Promise((resolve) => setTimeout(resolve, 20));
   await world.navigate();
-  assert.equal(world.requests.length, 4);
+  assert.equal(world.requests.length, 8);
   assert.deepEqual(await world.guide({ type: 'SCOPOS_STATUS', tabId: 7 }), { waiting: false, goal: '' });
 
   // A guide idle for more than 10 minutes doesn't wake up on the next page load.

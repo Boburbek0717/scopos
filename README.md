@@ -58,14 +58,15 @@ Pick **Claude Haiku 5.5** in the popup for the fastest answers (a few seconds).
 - **Scan.** The content script finds the visible interactive elements (buttons, links, inputs, tabs, menu items) and tags each one with a temporary `data-scopos-id`.
 - **Plan.** The service worker sends that list and your goal to Claude. The answer must match a JSON schema, so every step names its target by id, and ids that weren't on the page are dropped.
 - **Guide.** The overlay scrolls to each target, flies the cursor to it, and shows the step. Advancing is always your choice.
-- **Follow.** The guide is remembered per tab. When the tab loads a new page, Scopos scans it and asks Claude for the next steps, telling it what happened on earlier pages. In apps that redraw without loading a new page, clicking the last step's element makes Scopos look at the page again. On pages Chrome keeps extensions out of (like `chrome://` pages), the icon shows a **→** instead.
+- **Follow.** The guide is remembered per tab. When the tab loads a new page, Scopos scans it and asks Claude for the next steps, telling it what happened on earlier pages. In apps that redraw without loading a new page, clicking the last step's element makes Scopos look at the page again. It follows on its own only within the website you started on. When the tab moves to another site, or to a page Chrome keeps extensions out of (like `chrome://`), the icon shows a **→** and nothing is read until you click it.
 
 ## Privacy and safety
 
 - Scopos sends Claude the page title, its address (without the query string), and the **names and labels** of buttons, links and fields. **What you type into fields is never read or sent**, including rich-text editors.
 - Page text is treated as data, not instructions: the prompt tells Claude to ignore anything on the page that tries to give it orders.
 - The step card shows the element's own name from the page, so you can check what **Auto-Click** will press before pressing it.
-- Nothing runs until you click **Guide Me**, and it only runs in the tab you started it in. A guide stops after 10 pages, or after 10 minutes with no activity.
+- Nothing runs until you click **Guide Me**, and only in the tab you started it in. A guide follows you automatically only within the sites you started or continued it on; a new site needs a click on the icon. It stops after 10 pages, or after 10 minutes with no activity.
+- Only real clicks move a guide forward, so a page's own scripts can't push it along or trigger extra requests.
 
 ## Project layout
 

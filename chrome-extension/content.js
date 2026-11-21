@@ -399,7 +399,8 @@
       return;
     }
     if (step.actionType === 'type') return; // the user types the text themselves
-    el.click(); // the click listener below moves the guide on
+    el.click();
+    targetClicked(); // el.click() is a synthetic event, which the click listener below ignores
   }
 
   // ── Layout loop ───────────────────────────────────────────────────────
@@ -479,7 +480,9 @@
   }, true);
 
   // Clicking the highlighted element yourself counts as doing the step.
+  // Only real clicks: a page script can't push the guide along with synthetic ones.
   document.addEventListener('click', (event) => {
+    if (!event.isTrusted) return;
     const step = state.steps[state.index];
     if (!state.ui || !state.target || step?.actionType !== 'click') return;
     if (event.target instanceof Node && state.target.contains(event.target)) targetClicked();

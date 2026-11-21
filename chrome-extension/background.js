@@ -135,29 +135,54 @@ function resumeAfterNavigation(tabId) {
     // The overlay answers only on the page it was injected into: no answer means a new page.
     if (await overlayAlive(tabId)) return;
 
+    // Follow on its own only within the sites the user started or continued this guide on.
+    // Anywhere else, wait for a click on the icon before reading the page.
+    const tab = await chrome.tabs.get(tabId).catch(() => null);
+    if (!session.origins?.includes(originOf(tab?.url))) {
+      await waitForClick(tabId, session);
+      return;
+    }
+
     try {
       await new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
       await runPage(tabId, session);
     } catch (err) {
-      if (err instanceof NoAccessError) {
-        // A page Scopos may not enter (chrome://, the Web Store): one click on the icon continues.
-        session.waiting = true;
-        await saveSession(tabId, session);
-        await showWaitingBadge(tabId, true);
-      }
+      // A page Scopos may not enter (chrome://, the Web Store): one click on the icon continues.
+      if (err instanceof NoAccessError) await waitForClick(tabId, session);
       // Other errors are already shown on the page's card.
     }
   });
 }
 
-// The last step was clicked but the page stayed (apps that redraw in place): look again.
+// The last step was clicked but the page stayed (apps that redraw in place): look again,
+// at most once per planned page, and never to revive an expired guide.
 function rescanPage(tabId) {
   return exclusive(tabId, async () => {
     const session = await getSession(tabId);
-    if (!session) return;
-    session.lastActivityAt = Date.now();
+    const current = session?.pages.at(-1);
+    if (!current || current.rescanned) return;
+    if (Date.now() - session.lastActivityAt > SESSION_TTL_MS) {
+      await endSession(tabId);
+      return;
+    }
+    current.rescanned = true;
+    await saveSession(tabId, session);
     await runPage(tabId, session).catch(() => { /* already shown on the page's card */ });
   });
+}
+
+async function waitForClick(tabId, session) {
+  session.waiting = true;
+  await saveSession(tabId, session);
+  await showWaitingBadge(tabId, true);
+}
+
+function originOf(url) {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return null;
+  }
 }
 
 async function overlayAlive(tabId) {
@@ -187,7 +212,7 @@ async function startGuide(tabId, rawGoal) {
   if (!goal) throw new Error('Type where you want to go first.');
 
   const result = await exclusive(tabId, async () => {
-    const session = { goal, pages: [], waiting: false, lastActivityAt: Date.now() };
+    const session = { goal, pages: [], origins: [], waiting: false, lastActivityAt: Date.now() };
     await saveSession(tabId, session);
     return runPage(tabId, session);
   });
@@ -231,6 +256,11 @@ async function runPage(tabId, session) {
   }
 
   const page = await sendToTab(tabId, { type: 'SCOPOS_SCAN' });
+  // Every page planned here was reached with the user's say-so (Guide Me, an icon click,
+  // or a page on an origin already in this list), so its site joins the guide.
+  const origin = originOf(page?.url);
+  session.origins = session.origins ?? [];
+  if (origin && !session.origins.includes(origin)) session.origins.push(origin);
   await sendToTab(tabId, { type: 'SCOPOS_THINKING', goal: session.goal });
 
   let steps;
