@@ -2,6 +2,10 @@
 
 **A Chrome extension that walks you through any website, one step at a time.**
 
+### ▶ [Open the demo portal](https://scopos-demo-portal.boburbek.workers.dev) · [Download the extension (ZIP)](https://github.com/Boburbek0717/scopos/archive/refs/heads/main.zip)
+
+Install the extension ([2-minute steps below](#try-it-in-2-minutes)), open the demo portal, and ask Scopos: *"Register me for the Calculus I written exam"*.
+
 Type what you want to do, like *"Guide me to the exam registration page"*, and a blue cursor flies across the page to show you where to click. Scopos highlights the right button, explains the step in plain words, and follows you from page to page until you get there.
 
 It's made for the moments when you know what you want but not where the button is: a university portal, a CRM, a ticket tracker, an admin panel, a government form.
