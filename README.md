@@ -90,8 +90,10 @@ chrome-extension/   the extension (Manifest V3, plain HTML/CSS/JS, no build step
   prompt.js         the system prompt and step schema, shared with the demo server
   config.js         address of the demo server
 proxy/              the demo server (Cloudflare Worker)
+demo-portal/        Demo University, a fictional student portal to try Scopos on (static site)
 scripts/
   test-extension.mjs  tests for the service worker and the demo server
+  e2e-chrome.mjs      end-to-end test in real Chrome
 ```
 
 ## Demo server
