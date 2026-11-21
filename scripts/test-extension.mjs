@@ -28,6 +28,7 @@ function makeWorld({ stored, fetchReply, scan, demoProxyUrl = '' }) {
   const page = { sameDocument: false, url: 'https://uni.example/home', scanUrl: null };
   let listener;
   let onUpdated;
+  let onCreated;
   const chrome = {
     runtime: { id: 'ext', onMessage: { addListener: (fn) => { listener = fn; } } },
     storage: {
@@ -51,9 +52,10 @@ function makeWorld({ stored, fetchReply, scan, demoProxyUrl = '' }) {
         sentToTab.push(plain(message));
         return message.type === 'SCOPOS_SCAN' ? { ...scan, url: page.scanUrl ?? page.url } : { ok: true };
       },
-      get: async (tabId) => ({ id: tabId, url: page.url }),
+      get: async (tabId) => ({ id: tabId, url: page.url, status: 'loading' }),
       onUpdated: { addListener: (fn) => { onUpdated = fn; } },
       onRemoved: { addListener: () => {} },
+      onCreated: { addListener: (fn) => { onCreated = fn; } },
     },
     action: {
       setBadgeText: async ({ tabId, text }) => { badges[tabId] = text; },
@@ -83,8 +85,9 @@ function makeWorld({ stored, fetchReply, scan, demoProxyUrl = '' }) {
     onUpdated(tabId, { status: 'complete' });
     await new Promise((resolve) => setTimeout(resolve, 900));
   };
+  const createTab = (tab) => onCreated(tab);
   const fromTab = (message, tabId = 7) => listener(message, { id: 'ext', tab: { id: tabId } }, () => {});
-  return { guide, sentToTab, requests, navigate, fromTab, badges, access, page, sessionStore };
+  return { guide, sentToTab, requests, navigate, fromTab, createTab, badges, access, page, sessionStore };
 }
 
 const scan = {
@@ -287,6 +290,42 @@ const stepsReply = reply(200, {
   for (let i = 0; i < 10; i++) await capped.navigate();
   assert.equal(capped.requests.length, 10);
   assert.match(capped.sentToTab.at(-1).message, /stopped after 10 pages/);
+}
+
+// A step's link opens a new tab: the guide moves there, and the click approves that page even on another site.
+{
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const world = makeWorld({ stored: { scoposApiKey: 'k' }, fetchReply: stepsReply, scan });
+  await world.guide({ type: 'SCOPOS_GUIDE', tabId: 7, goal: 'apply' });
+  world.fromTab({ type: 'SCOPOS_CLICKED' });
+  await sleep(20);
+  world.page.url = 'https://neptun.example/login';
+  world.createTab({ id: 8, openerTabId: 7 });
+  await sleep(50);
+  await world.navigate(8);
+  assert.equal(world.requests.length, 2, 'the new tab gets the next plan');
+  assert.equal(world.sessionStore['guide:7'], undefined, 'the old tab lets go of the guide');
+  assert.ok(world.sessionStore['guide:8'].origins.includes('https://neptun.example'));
+  assert.ok(world.sentToTab.some((m) => m.type === 'SCOPOS_STOP'), 'the old tab overlay is closed');
+
+  // A tab the page opens on its own, with no click on a step, doesn't take the guide.
+  world.createTab({ id: 9, openerTabId: 8 });
+  await sleep(700);
+  assert.equal(world.sessionStore['guide:9'], undefined);
+  assert.ok(world.sessionStore['guide:8']);
+
+  // Same tab, another site, after a click on the step's element: followed without the icon.
+  world.fromTab({ type: 'SCOPOS_CLICKED' }, 8);
+  await sleep(20);
+  world.page.url = 'https://third.example/x';
+  await world.navigate(8);
+  assert.equal(world.requests.length, 3);
+
+  // A site you go to yourself, with no click on a step, still waits for the icon.
+  world.page.url = 'https://fourth.example/';
+  await world.navigate(8);
+  assert.equal(world.requests.length, 3);
+  assert.equal(world.badges[8], '→');
 }
 
 console.log('background.js: all checks passed');

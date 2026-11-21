@@ -28,6 +28,10 @@ const HISTORY_PAGES = 3;
 const SESSION_TTL_MS = 10 * 60 * 1000;
 // Give script-rendered pages a moment to draw their buttons before scanning.
 const SETTLE_MS = 600;
+// A new tab opened this soon after the user clicked a step's element continues the guide.
+const NEW_TAB_WINDOW_MS = 5000;
+// The page a step's click leads to, if it loads within this time, counts as the user's choice.
+const CLICK_APPROVAL_MS = 60 * 1000;
 
 class NoAccessError extends Error {}
 
@@ -57,6 +61,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case 'SCOPOS_RESCAN':
       if (!fromPopup) rescanPage(sender.tab.id);
       return false;
+    case 'SCOPOS_CLICKED':
+      if (!fromPopup) recordClick(sender.tab.id);
+      return false;
     default:
       return false;
   }
@@ -69,6 +76,11 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 
 // Tabs with a plan being made right now, so overlapping events plan only once.
 const busyTabs = new Set();
+
+// A step's link that opens in a new tab: the guide moves to that tab.
+chrome.tabs.onCreated.addListener((tab) => {
+  followIntoNewTab(tab);
+});
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   chrome.storage.session.remove(sessionKey(tabId));
@@ -135,17 +147,23 @@ function resumeAfterNavigation(tabId) {
     // The overlay answers only on the page it was injected into: no answer means a new page.
     if (await overlayAlive(tabId)) return;
 
-    // Follow on its own only within the sites the user started or continued this guide on.
-    // Anywhere else, wait for a click on the icon before reading the page.
-    const tab = await chrome.tabs.get(tabId).catch(() => null);
-    if (!session.origins?.includes(originOf(tab?.url))) {
-      await waitForClick(tabId, session);
-      return;
+    // The page the user's click on a step's element led to is theirs to read, on any site,
+    // once. Otherwise follow only within the sites they started or continued the guide on,
+    // and anywhere else wait for a click on the icon before reading the page.
+    const approvedByClick = Boolean(session.lastClickAt) && Date.now() - session.lastClickAt < CLICK_APPROVAL_MS;
+    session.lastClickAt = null;
+    await saveSession(tabId, session);
+    if (!approvedByClick) {
+      const tab = await chrome.tabs.get(tabId).catch(() => null);
+      if (!session.origins?.includes(originOf(tab?.url))) {
+        await waitForClick(tabId, session);
+        return;
+      }
     }
 
     try {
       await new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
-      await runPage(tabId, session);
+      await runPage(tabId, session, { userApproved: approvedByClick });
     } catch (err) {
       // A page Scopos may not enter (chrome://, the Web Store): one click on the icon continues.
       if (err instanceof NoAccessError) await waitForClick(tabId, session);
@@ -166,9 +184,44 @@ function rescanPage(tabId) {
       return;
     }
     current.rescanned = true;
+    session.lastClickAt = null; // the click stayed on this page; it approves nothing else
     await saveSession(tabId, session);
     await runPage(tabId, session).catch(() => { /* already shown on the page's card */ });
   });
+}
+
+async function recordClick(tabId) {
+  const session = await getSession(tabId);
+  if (!session) return;
+  session.lastClickAt = Date.now();
+  session.lastActivityAt = session.lastClickAt;
+  await saveSession(tabId, session);
+}
+
+/**
+ * A tab opened from a guided tab right after the user clicked the step's element
+ * takes the guide over. Tabs a page opens on its own, without that click, don't.
+ */
+async function followIntoNewTab(tab) {
+  if (!Number.isInteger(tab.openerTabId)) return;
+  // The click's message and the new tab race each other; give the click a moment to land.
+  let session = null;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    session = await getSession(tab.openerTabId);
+    if (!session || session.lastClickAt) break;
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+  if (!session?.lastClickAt || Date.now() - session.lastClickAt > NEW_TAB_WINDOW_MS) return;
+
+  session.waiting = false; // lastClickAt stays: it approves the page this tab loads
+  await saveSession(tab.id, session);
+  await chrome.storage.session.remove(sessionKey(tab.openerTabId));
+  await showWaitingBadge(tab.openerTabId, false);
+  chrome.tabs.sendMessage(tab.openerTabId, { type: 'SCOPOS_STOP' }).catch(() => {});
+
+  // A fast page may have finished loading before the guide got here.
+  const now = await chrome.tabs.get(tab.id).catch(() => null);
+  if (now?.status === 'complete') resumeAfterNavigation(tab.id);
 }
 
 async function waitForClick(tabId, session) {

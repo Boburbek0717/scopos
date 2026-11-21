@@ -375,6 +375,10 @@
 
   // The highlighted element was clicked, by the user or by Auto-Click.
   function targetClicked() {
+    // A click that can open a page (a link, a submit button, or the last step) approves
+    // that page for the guide, in this tab or in a new tab it opens.
+    const lastStep = state.index === state.steps.length - 1;
+    if (lastStep || state.target?.closest('a[href], [type="submit"]')) notifyBackground({ type: 'SCOPOS_CLICKED' });
     if (state.index < state.steps.length - 1) {
       goTo(state.index + 1);
       return;
