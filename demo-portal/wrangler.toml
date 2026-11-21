@@ -1,0 +1,7 @@
+# Static hosting for the Demo University portal (fictional) on Cloudflare Workers.
+# Deploy from this folder: npx wrangler deploy
+name = "scopos-demo-portal"
+compatibility_date = "2026-06-01"
+
+[assets]
+directory = "./public"

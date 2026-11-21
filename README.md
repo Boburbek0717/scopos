@@ -28,6 +28,14 @@ Goals to try:
 
 Scopos uses **Claude Haiku 5.5** by default, which answers in a few seconds. Sonnet 5.5 and Opus 5.5 are in the popup's model list if you want more careful answers.
 
+### Demo portal
+
+[`demo-portal/`](demo-portal) is **Demo University**, a fictional student portal (plain HTML, no real data) built for this demo: busy menus, deadlines, quick links, and a full exam-registration flow. Open it, then ask Scopos:
+
+> Register me for the Calculus I written exam
+
+Scopos goes Home → Exams → Exam registration → the right row → tick the box → Confirm. To run it locally: `python -m http.server 8798 --directory demo-portal/public`, then open http://localhost:8798.
+
 ## What you'll see
 
 1. The page scrolls to the element you need.

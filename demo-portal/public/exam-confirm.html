@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Confirm exam registration · Demo University Student Portal</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-section="Exams">
+<div class="layout">
+  <main>
+    <div class="crumbs"><a href="index.html">Home</a> › <a href="exams.html">Exams</a> › <a href="exam-registration.html">Exam registration</a> › Confirm</div>
+    <h1>Confirm exam registration</h1>
+    <section class="card confirm" id="confirm">
+      <dl id="exam-details"></dl>
+      <label class="check"><input type="checkbox" id="agree"> I have read the exam rules and understand that cancelling after the registration deadline may cost a fee.</label>
+      <button class="btn" id="confirm-btn" type="button" disabled>Confirm registration</button>
+      <a class="btn secondary" href="exam-registration.html">Back to the list</a>
+    </section>
+    <section class="card success" id="done" tabindex="-1" hidden>
+      <h2 class="section">Registration complete</h2>
+      <p id="done-text"></p>
+      <a class="btn secondary" href="page.html?p=Registered%20exams">See my registered exams</a>
+    </section>
+  </main>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
