@@ -375,10 +375,15 @@
 
   // The highlighted element was clicked, by the user or by Auto-Click.
   function targetClicked() {
-    // A click that can open a page (a link, a submit button, or the last step) approves
-    // that page for the guide, in this tab or in a new tab it opens.
+    // A click that can open a page approves the site it leads to (and only that site), in this
+    // tab or in a new tab it opens: a link's address, a form's target, or else this page's site.
     const lastStep = state.index === state.steps.length - 1;
-    if (lastStep || state.target?.closest('a[href], [type="submit"]')) notifyBackground({ type: 'SCOPOS_CLICKED' });
+    const link = state.target?.closest('a[href]');
+    const submit = state.target?.closest('[type="submit"]');
+    if (lastStep || link || submit) {
+      const href = link?.href || submit?.form?.action || location.href;
+      notifyBackground({ type: 'SCOPOS_CLICKED', href });
+    }
     if (state.index < state.steps.length - 1) {
       goTo(state.index + 1);
       return;

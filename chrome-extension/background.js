@@ -30,8 +30,8 @@ const SESSION_TTL_MS = 10 * 60 * 1000;
 const SETTLE_MS = 600;
 // A new tab opened this soon after the user clicked a step's element continues the guide.
 const NEW_TAB_WINDOW_MS = 5000;
-// The page a step's click leads to, if it loads within this time, counts as the user's choice.
-const CLICK_APPROVAL_MS = 60 * 1000;
+// A step's click approves the site it leads to, for the next page that loads within this time.
+const CLICK_APPROVAL_MS = 20 * 1000;
 
 class NoAccessError extends Error {}
 
@@ -62,7 +62,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (!fromPopup) rescanPage(sender.tab.id);
       return false;
     case 'SCOPOS_CLICKED':
-      if (!fromPopup) recordClick(sender.tab.id);
+      if (!fromPopup) recordClick(sender.tab.id, message.href);
       return false;
     default:
       return false;
@@ -147,23 +147,20 @@ function resumeAfterNavigation(tabId) {
     // The overlay answers only on the page it was injected into: no answer means a new page.
     if (await overlayAlive(tabId)) return;
 
-    // The page the user's click on a step's element led to is theirs to read, on any site,
-    // once. Otherwise follow only within the sites they started or continued the guide on,
-    // and anywhere else wait for a click on the icon before reading the page.
-    const approvedByClick = Boolean(session.lastClickAt) && Date.now() - session.lastClickAt < CLICK_APPROVAL_MS;
-    session.lastClickAt = null;
+    // Follow within the sites the user started or continued the guide on, plus, once, the
+    // site a step's click led to. Anywhere else, wait for a click on the icon before reading.
+    const clickOrigin = takeClickApproval(session);
     await saveSession(tabId, session);
-    if (!approvedByClick) {
-      const tab = await chrome.tabs.get(tabId).catch(() => null);
-      if (!session.origins?.includes(originOf(tab?.url))) {
-        await waitForClick(tabId, session);
-        return;
-      }
+    const tab = await chrome.tabs.get(tabId).catch(() => null);
+    const tabOrigin = originOf(tab?.url);
+    if (!session.origins?.includes(tabOrigin) && tabOrigin !== clickOrigin) {
+      await waitForClick(tabId, session);
+      return;
     }
 
     try {
       await new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
-      await runPage(tabId, session, { userApproved: approvedByClick });
+      await runPage(tabId, session, { clickOrigin });
     } catch (err) {
       // A page Scopos may not enter (chrome://, the Web Store): one click on the icon continues.
       if (err instanceof NoAccessError) await waitForClick(tabId, session);
@@ -184,18 +181,27 @@ function rescanPage(tabId) {
       return;
     }
     current.rescanned = true;
-    session.lastClickAt = null; // the click stayed on this page; it approves nothing else
+    session.clickApproval = null; // the click stayed on this page; it approves nothing else
     await saveSession(tabId, session);
     await runPage(tabId, session).catch(() => { /* already shown on the page's card */ });
   });
 }
 
-async function recordClick(tabId) {
+// Bound to where the click leads (the link's or form's address): it approves that site only.
+async function recordClick(tabId, href) {
   const session = await getSession(tabId);
-  if (!session) return;
-  session.lastClickAt = Date.now();
-  session.lastActivityAt = session.lastClickAt;
+  const origin = originOf(href);
+  if (!session || !origin) return;
+  session.clickApproval = { origin, at: Date.now() };
+  session.lastActivityAt = session.clickApproval.at;
   await saveSession(tabId, session);
+}
+
+// Use a click's approval at most once, and only while it's fresh.
+function takeClickApproval(session, maxAgeMs = CLICK_APPROVAL_MS) {
+  const approval = session.clickApproval;
+  session.clickApproval = null;
+  return approval && Date.now() - approval.at < maxAgeMs ? approval.origin : null;
 }
 
 /**
@@ -208,12 +214,21 @@ async function followIntoNewTab(tab) {
   let session = null;
   for (let attempt = 0; attempt < 4; attempt++) {
     session = await getSession(tab.openerTabId);
-    if (!session || session.lastClickAt) break;
+    if (!session || session.clickApproval) break;
     await new Promise((resolve) => setTimeout(resolve, 150));
   }
-  if (!session?.lastClickAt || Date.now() - session.lastClickAt > NEW_TAB_WINDOW_MS) return;
+  if (!session) return;
+  // The new tab must be heading where the clicked link pointed; a pop-up the page opened
+  // somewhere else doesn't get the guide. The approval is used up either way.
+  const clickOrigin = takeClickApproval(session, NEW_TAB_WINDOW_MS);
+  const opening = originOf(tab.pendingUrl || tab.url);
+  if (!clickOrigin || (opening && opening !== clickOrigin)) {
+    await saveSession(tab.openerTabId, session);
+    return;
+  }
 
-  session.waiting = false; // lastClickAt stays: it approves the page this tab loads
+  session.waiting = false;
+  session.clickApproval = { origin: clickOrigin, at: Date.now() }; // for the page this tab loads
   await saveSession(tab.id, session);
   await chrome.storage.session.remove(sessionKey(tab.openerTabId));
   await showWaitingBadge(tab.openerTabId, false);
@@ -289,9 +304,10 @@ function busyError() {
 /**
  * Scan the tab's current page, plan the next steps, and show them.
  * userApproved: the user asked for this page (Guide Me or an icon click), so its
- * site joins the guide. Automatic runs only read sites already in the guide.
+ * site joins the guide. Automatic runs only read sites already in the guide, or the
+ * one site a step's click led to (clickOrigin), which is read but doesn't join.
  */
-async function runPage(tabId, session, { userApproved = false } = {}) {
+async function runPage(tabId, session, { userApproved = false, clickOrigin = null } = {}) {
   const settings = await loadSettings();
 
   try {
@@ -318,7 +334,7 @@ async function runPage(tabId, session, { userApproved = false } = {}) {
   session.origins = session.origins ?? [];
   if (userApproved) {
     if (origin && !session.origins.includes(origin)) session.origins.push(origin);
-  } else if (!session.origins.includes(origin)) {
+  } else if (!session.origins.includes(origin) && origin !== clickOrigin) {
     await sendToTab(tabId, { type: 'SCOPOS_STOP' });
     await waitForClick(tabId, session);
     return 0;

@@ -292,40 +292,57 @@ const stepsReply = reply(200, {
   assert.match(capped.sentToTab.at(-1).message, /stopped after 10 pages/);
 }
 
-// A step's link opens a new tab: the guide moves there, and the click approves that page even on another site.
+// A step's link opens a new tab: the guide moves there, and the click approves the site that
+// link points at (once), even if it's another site. Nothing else gets that approval.
 {
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   const world = makeWorld({ stored: { scoposApiKey: 'k' }, fetchReply: stepsReply, scan });
   await world.guide({ type: 'SCOPOS_GUIDE', tabId: 7, goal: 'apply' });
-  world.fromTab({ type: 'SCOPOS_CLICKED' });
+  world.fromTab({ type: 'SCOPOS_CLICKED', href: 'https://neptun.example/login' });
   await sleep(20);
   world.page.url = 'https://neptun.example/login';
-  world.createTab({ id: 8, openerTabId: 7 });
+  world.createTab({ id: 8, openerTabId: 7, pendingUrl: 'https://neptun.example/login' });
   await sleep(50);
   await world.navigate(8);
   assert.equal(world.requests.length, 2, 'the new tab gets the next plan');
   assert.equal(world.sessionStore['guide:7'], undefined, 'the old tab lets go of the guide');
-  assert.ok(world.sessionStore['guide:8'].origins.includes('https://neptun.example'));
   assert.ok(world.sentToTab.some((m) => m.type === 'SCOPOS_STOP'), 'the old tab overlay is closed');
+  assert.equal(world.sessionStore['guide:8'].origins.includes('https://neptun.example'), false,
+    'a site reached by a step click is read once, not added to the guide');
 
   // A tab the page opens on its own, with no click on a step, doesn't take the guide.
-  world.createTab({ id: 9, openerTabId: 8 });
+  world.createTab({ id: 9, openerTabId: 8, pendingUrl: 'https://neptun.example/ad' });
   await sleep(700);
   assert.equal(world.sessionStore['guide:9'], undefined);
-  assert.ok(world.sessionStore['guide:8']);
 
-  // Same tab, another site, after a click on the step's element: followed without the icon.
-  world.fromTab({ type: 'SCOPOS_CLICKED' }, 8);
+  // Right after a step click, a pop-up to a different site doesn't take the guide either,
+  // and it uses up the click's approval.
+  world.fromTab({ type: 'SCOPOS_CLICKED', href: 'https://neptun.example/exams' }, 8);
+  await sleep(20);
+  world.createTab({ id: 10, openerTabId: 8, pendingUrl: 'https://ads.example/win' });
+  await sleep(50);
+  assert.equal(world.sessionStore['guide:10'], undefined, 'a pop-up elsewhere is not followed');
+  assert.equal(world.sessionStore['guide:8'].clickApproval, null, 'and the approval is spent');
+
+  // Same tab, another site, after a click on a link pointing there: followed without the icon.
+  world.fromTab({ type: 'SCOPOS_CLICKED', href: 'https://third.example/x' }, 8);
   await sleep(20);
   world.page.url = 'https://third.example/x';
   await world.navigate(8);
   assert.equal(world.requests.length, 3);
 
-  // A site you go to yourself, with no click on a step, still waits for the icon.
-  world.page.url = 'https://fourth.example/';
+  // A click approves only the site its link points at: landing somewhere else waits for the icon.
+  world.fromTab({ type: 'SCOPOS_CLICKED', href: 'https://fourth.example/a' }, 8);
+  await sleep(20);
+  world.page.url = 'https://evil.example/';
+  await world.navigate(8);
+  assert.equal(world.requests.length, 3, 'a different landing site is not read');
+  assert.equal(world.badges[8], '→');
+
+  // A site you go to yourself, with no click on a step, also waits for the icon.
+  world.page.url = 'https://fifth.example/';
   await world.navigate(8);
   assert.equal(world.requests.length, 3);
-  assert.equal(world.badges[8], '→');
 }
 
 console.log('background.js: all checks passed');
