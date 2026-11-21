@@ -25,7 +25,7 @@ function makeWorld({ stored, fetchReply, scan, demoProxyUrl = '' }) {
   const sessionStore = {};
   const access = { allowed: true }; // flip to false to act like a page Scopos can't open
   // sameDocument: the old overlay is still there to answer. url: what the tab shows now.
-  const page = { sameDocument: false, url: 'https://uni.example/home' };
+  const page = { sameDocument: false, url: 'https://uni.example/home', scanUrl: null };
   let listener;
   let onUpdated;
   const chrome = {
@@ -49,7 +49,7 @@ function makeWorld({ stored, fetchReply, scan, demoProxyUrl = '' }) {
           throw new Error('Could not establish connection. Receiving end does not exist.');
         }
         sentToTab.push(plain(message));
-        return message.type === 'SCOPOS_SCAN' ? { ...scan, url: page.url } : { ok: true };
+        return message.type === 'SCOPOS_SCAN' ? { ...scan, url: page.scanUrl ?? page.url } : { ok: true };
       },
       get: async (tabId) => ({ id: tabId, url: page.url }),
       onUpdated: { addListener: (fn) => { onUpdated = fn; } },
@@ -253,6 +253,16 @@ const stepsReply = reply(200, {
   await world.navigate();
   assert.equal(world.requests.length, 8, 'once the user continued there, that site is followed too');
   world.page.url = 'https://uni.example/home';
+
+  // The tab redirects to another site after the resume check: the scan's own address is checked
+  // again, nothing goes to Claude, and that site is not added to the guide.
+  const sentBefore = world.requests.length;
+  world.page.scanUrl = 'https://evil.example/steal';
+  await world.navigate();
+  assert.equal(world.requests.length, sentBefore, 'a redirect to another site is not sent to Claude');
+  assert.equal(world.badges[7], '→');
+  assert.equal(world.sessionStore['guide:7'].origins.includes('https://evil.example'), false);
+  world.page.scanUrl = null;
 
   // Stop on the page ends it: the next page load stays quiet.
   world.fromTab({ type: 'SCOPOS_END' });

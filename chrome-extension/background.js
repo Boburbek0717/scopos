@@ -214,7 +214,7 @@ async function startGuide(tabId, rawGoal) {
   const result = await exclusive(tabId, async () => {
     const session = { goal, pages: [], origins: [], waiting: false, lastActivityAt: Date.now() };
     await saveSession(tabId, session);
-    return runPage(tabId, session);
+    return runPage(tabId, session, { userApproved: true });
   });
   return result ?? busyError();
 }
@@ -224,7 +224,7 @@ async function continueGuide(tabId) {
     const session = await getSession(tabId);
     if (!session) throw new Error('There is no guide to continue. Type a goal and click Guide Me.');
     session.lastActivityAt = Date.now();
-    return runPage(tabId, session);
+    return runPage(tabId, session, { userApproved: true });
   });
   return result ?? busyError();
 }
@@ -233,8 +233,12 @@ function busyError() {
   throw new Error('Scopos is already working on this page. Give it a few seconds.');
 }
 
-/** Scan the tab's current page, plan the next steps, and show them. */
-async function runPage(tabId, session) {
+/**
+ * Scan the tab's current page, plan the next steps, and show them.
+ * userApproved: the user asked for this page (Guide Me or an icon click), so its
+ * site joins the guide. Automatic runs only read sites already in the guide.
+ */
+async function runPage(tabId, session, { userApproved = false } = {}) {
   const settings = await loadSettings();
 
   try {
@@ -256,11 +260,16 @@ async function runPage(tabId, session) {
   }
 
   const page = await sendToTab(tabId, { type: 'SCOPOS_SCAN' });
-  // Every page planned here was reached with the user's say-so (Guide Me, an icon click,
-  // or a page on an origin already in this list), so its site joins the guide.
+  // Checked against the page actually scanned, so a redirect after the resume check can't slip through.
   const origin = originOf(page?.url);
   session.origins = session.origins ?? [];
-  if (origin && !session.origins.includes(origin)) session.origins.push(origin);
+  if (userApproved) {
+    if (origin && !session.origins.includes(origin)) session.origins.push(origin);
+  } else if (!session.origins.includes(origin)) {
+    await sendToTab(tabId, { type: 'SCOPOS_STOP' });
+    await waitForClick(tabId, session);
+    return 0;
+  }
   await sendToTab(tabId, { type: 'SCOPOS_THINKING', goal: session.goal });
 
   let steps;
