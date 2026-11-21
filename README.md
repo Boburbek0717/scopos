@@ -26,7 +26,7 @@ Goals to try:
 | wikipedia.org | Take me to a random article |
 | github.com | How do I sign up? |
 
-Pick **Claude Haiku 5.5** in the popup for the fastest answers (a few seconds).
+Scopos uses **Claude Haiku 5.5** by default, which answers in a few seconds. Sonnet 5.5 and Opus 5.5 are in the popup's model list if you want more careful answers.
 
 ## What you'll see
 

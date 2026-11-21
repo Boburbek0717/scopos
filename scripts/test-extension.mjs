@@ -147,7 +147,7 @@ const stepsReply = reply(200, {
   ]);
 }
 
-// Haiku gets no fallback beta; unknown stored model falls back to Opus.
+// Haiku gets no fallback beta; no stored model, or an unknown one, means the Haiku default.
 {
   const haiku = makeWorld({ stored: { scoposApiKey: 'k', scoposModel: 'claude-haiku-5-5' }, fetchReply: stepsReply, scan });
   await haiku.guide({ type: 'SCOPOS_GUIDE', tabId: 1, goal: 'x' });
@@ -156,7 +156,11 @@ const stepsReply = reply(200, {
 
   const odd = makeWorld({ stored: { scoposApiKey: 'k', scoposModel: 'gpt-4' }, fetchReply: stepsReply, scan });
   await odd.guide({ type: 'SCOPOS_GUIDE', tabId: 1, goal: 'x' });
-  assert.equal(odd.requests[0].body.model, 'claude-opus-5-5');
+  assert.equal(odd.requests[0].body.model, 'claude-haiku-5-5');
+
+  const unset = makeWorld({ stored: { scoposApiKey: 'k' }, fetchReply: stepsReply, scan });
+  await unset.guide({ type: 'SCOPOS_GUIDE', tabId: 1, goal: 'x' });
+  assert.equal(unset.requests[0].body.model, 'claude-haiku-5-5');
 }
 
 // Errors: missing key, bad key (shown on the page too), refusal, messages from a tab.

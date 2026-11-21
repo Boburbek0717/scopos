@@ -12,7 +12,8 @@ importScripts('config.js', 'prompt.js');
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const DEMO_PROXY_URL = self.SCOPOS_CONFIG?.demoProxyUrl || '';
 const API_VERSION = '2023-06-01';
-const DEFAULT_MODEL = 'claude-opus-5-5';
+// Fastest model: answers in a few seconds, which matters most while someone waits on a page.
+const DEFAULT_MODEL = 'claude-haiku-5-5';
 const MODELS = new Set(['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5']);
 // Haiku has no server-side refusal fallback; on the others a decline is re-run on a fallback model.
 const FALLBACK_MODELS = new Set(['claude-opus-5-5', 'claude-sonnet-5-5']);
