@@ -54,6 +54,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case 'SCOPOS_END':
       if (!fromPopup) endSession(sender.tab.id);
       return false;
+    case 'SCOPOS_RESCAN':
+      if (!fromPopup) rescanPage(sender.tab.id);
+      return false;
     default:
       return false;
   }
@@ -61,9 +64,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 // A page load in a tab with a guide running: pick the guide up on the new page.
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-  if (changeInfo.status === 'loading') markNavigating(tabId);
-  else if (changeInfo.status === 'complete') resumeAfterNavigation(tabId);
+  if (changeInfo.status === 'complete') resumeAfterNavigation(tabId);
 });
+
+// Tabs with a plan being made right now, so overlapping events plan only once.
+const busyTabs = new Set();
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   chrome.storage.session.remove(sessionKey(tabId));
@@ -104,36 +109,63 @@ async function recordProgress(tabId, index) {
   await saveSession(tabId, session);
 }
 
-async function markNavigating(tabId) {
-  const session = await getSession(tabId);
-  if (session && !session.navigating) {
-    session.navigating = true;
-    await saveSession(tabId, session);
+/**
+ * Run `work` unless the tab already has a plan in progress. The tab is marked
+ * busy before the first await, so two events arriving together can't both start.
+ */
+async function exclusive(tabId, work) {
+  if (busyTabs.has(tabId)) return null;
+  busyTabs.add(tabId);
+  try {
+    return await work();
+  } finally {
+    busyTabs.delete(tabId);
   }
 }
 
-async function resumeAfterNavigation(tabId) {
-  const session = await getSession(tabId);
-  if (!session?.navigating) return;
-  // Measured from the last step shown or advanced, never from page-load bookkeeping.
-  if (Date.now() - session.lastActivityAt > SESSION_TTL_MS) {
-    await endSession(tabId);
-    return;
-  }
-  session.navigating = false;
-  await saveSession(tabId, session);
-  await new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
-
-  try {
-    await runPage(tabId, session);
-  } catch (err) {
-    if (err instanceof NoAccessError) {
-      // Chrome only lets Scopos into the new page after the user clicks its icon.
-      session.waiting = true;
-      await saveSession(tabId, session);
-      await showWaitingBadge(tabId, true);
+function resumeAfterNavigation(tabId) {
+  return exclusive(tabId, async () => {
+    const session = await getSession(tabId);
+    if (!session) return;
+    // Measured from the last step shown or advanced, never from page-load bookkeeping.
+    if (Date.now() - session.lastActivityAt > SESSION_TTL_MS) {
+      await endSession(tabId);
+      return;
     }
-    // Other errors are already shown on the page's card.
+    // The overlay answers only on the page it was injected into: no answer means a new page.
+    if (await overlayAlive(tabId)) return;
+
+    try {
+      await new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
+      await runPage(tabId, session);
+    } catch (err) {
+      if (err instanceof NoAccessError) {
+        // A page Scopos may not enter (chrome://, the Web Store): one click on the icon continues.
+        session.waiting = true;
+        await saveSession(tabId, session);
+        await showWaitingBadge(tabId, true);
+      }
+      // Other errors are already shown on the page's card.
+    }
+  });
+}
+
+// The last step was clicked but the page stayed (apps that redraw in place): look again.
+function rescanPage(tabId) {
+  return exclusive(tabId, async () => {
+    const session = await getSession(tabId);
+    if (!session) return;
+    session.lastActivityAt = Date.now();
+    await runPage(tabId, session).catch(() => { /* already shown on the page's card */ });
+  });
+}
+
+async function overlayAlive(tabId) {
+  try {
+    const answer = await chrome.tabs.sendMessage(tabId, { type: 'SCOPOS_PING' });
+    return answer?.alive === true;
+  } catch {
+    return false;
   }
 }
 
@@ -154,16 +186,26 @@ async function startGuide(tabId, rawGoal) {
   const goal = typeof rawGoal === 'string' ? rawGoal.trim().slice(0, MAX_GOAL_LENGTH) : '';
   if (!goal) throw new Error('Type where you want to go first.');
 
-  const session = { goal, pages: [], navigating: false, waiting: false, lastActivityAt: Date.now() };
-  await saveSession(tabId, session);
-  return runPage(tabId, session);
+  const result = await exclusive(tabId, async () => {
+    const session = { goal, pages: [], waiting: false, lastActivityAt: Date.now() };
+    await saveSession(tabId, session);
+    return runPage(tabId, session);
+  });
+  return result ?? busyError();
 }
 
 async function continueGuide(tabId) {
-  const session = await getSession(tabId);
-  if (!session) throw new Error('There is no guide to continue. Type a goal and click Guide Me.');
-  session.lastActivityAt = Date.now();
-  return runPage(tabId, session);
+  const result = await exclusive(tabId, async () => {
+    const session = await getSession(tabId);
+    if (!session) throw new Error('There is no guide to continue. Type a goal and click Guide Me.');
+    session.lastActivityAt = Date.now();
+    return runPage(tabId, session);
+  });
+  return result ?? busyError();
+}
+
+function busyError() {
+  throw new Error('Scopos is already working on this page. Give it a few seconds.');
 }
 
 /** Scan the tab's current page, plan the next steps, and show them. */
@@ -180,7 +222,6 @@ async function runPage(tabId, session) {
   }
 
   session.waiting = false;
-  session.navigating = false;
   await saveSession(tabId, session);
   await showWaitingBadge(tabId, false);
 

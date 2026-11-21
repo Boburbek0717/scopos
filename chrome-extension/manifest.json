@@ -5,7 +5,7 @@
   "description": "Tell Scopos where you want to go on a website, and a blue cursor walks you there one step at a time.",
   "minimum_chrome_version": "116",
   "permissions": ["activeTab", "scripting", "storage"],
-  "host_permissions": ["https://api.anthropic.com/*", "https://scopos-proxy.boburbek.workers.dev/*"],
+  "host_permissions": ["https://api.anthropic.com/*", "https://scopos-proxy.boburbek.workers.dev/*", "<all_urls>"],
   "background": {
     "service_worker": "background.js"
   },

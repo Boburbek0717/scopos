@@ -14,6 +14,7 @@ ANSWER AS STEPS:
 break the answer into the sequence of actions the person has to perform, in order. one action per step.
 - if the goal takes a single action, return a single step.
 - if what they need isn't on this page, the early steps are how to get there: open the menu, follow the link, switch the tab. don't skip ahead to the final click.
+- every step is something to do. never write a step that only says what you can't find. if the target isn't on this page, pick the link, tab or menu most likely to lead there (for example Apply or Admissions for a registration) and make opening it the step.
 - when a step opens a new page, make it the last step. Scopos looks at the next page as soon as it loads and plans the rest from there, so don't guess at steps on pages you can't see yet.
 - keep each instruction to one short sentence, phrased as an action ("open the Exams tab", "click Register at the bottom of the list").
 - for typing, say what to type. for dropdowns, say which option to pick.

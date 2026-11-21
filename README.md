@@ -37,7 +37,7 @@ Pick **Claude Haiku 5.5** in the popup for the fastest answers (a few seconds).
 
 | Control | What it does |
 |---|---|
-| **Next Step** | Go to the next instruction |
+| **Next Step** | Go to the next instruction (clicking the highlighted element yourself does the same) |
 | **Auto-Click** | Press the highlighted element for you (only when you press it) |
 | **Stop** or `Esc` | End the guide |
 
@@ -58,7 +58,7 @@ Pick **Claude Haiku 5.5** in the popup for the fastest answers (a few seconds).
 - **Scan.** The content script finds the visible interactive elements (buttons, links, inputs, tabs, menu items) and tags each one with a temporary `data-scopos-id`.
 - **Plan.** The service worker sends that list and your goal to Claude. The answer must match a JSON schema, so every step names its target by id, and ids that weren't on the page are dropped.
 - **Guide.** The overlay scrolls to each target, flies the cursor to it, and shows the step. Advancing is always your choice.
-- **Follow.** The guide is remembered per tab. When the tab loads a new page, Scopos scans it and asks Claude for the next steps, telling it what happened on earlier pages. If Chrome doesn't let the extension into the new page, the icon shows a **→**; one click continues.
+- **Follow.** The guide is remembered per tab. When the tab loads a new page, Scopos scans it and asks Claude for the next steps, telling it what happened on earlier pages. In apps that redraw without loading a new page, clicking the last step's element makes Scopos look at the page again. On pages Chrome keeps extensions out of (like `chrome://` pages), the icon shows a **→** instead.
 
 ## Privacy and safety
 
@@ -71,7 +71,7 @@ Pick **Claude Haiku 5.5** in the popup for the fastest answers (a few seconds).
 
 ```
 chrome-extension/   the extension (Manifest V3, plain HTML/CSS/JS, no build step)
-  manifest.json     permissions: activeTab, scripting, storage
+  manifest.json     permissions: activeTab, scripting, storage, plus site access so a guide can follow you to the next page
   popup.html/.js    goal, model and optional API key
   background.js     service worker: scanning, Claude requests, multi-page guides
   content.js/.css   page scan and the overlay (highlight, cursor, step card)

@@ -24,6 +24,7 @@ function makeWorld({ stored, fetchReply, scan, demoProxyUrl = '' }) {
   const badges = {};
   const sessionStore = {};
   const access = { allowed: true }; // flip to false to act like a page Scopos can't open
+  const page = { sameDocument: false }; // true: the old overlay is still there to answer
   let listener;
   let onUpdated;
   const chrome = {
@@ -42,6 +43,10 @@ function makeWorld({ stored, fetchReply, scan, demoProxyUrl = '' }) {
     },
     tabs: {
       sendMessage: async (_tabId, message) => {
+        if (message.type === 'SCOPOS_PING') {
+          if (page.sameDocument) return { alive: true };
+          throw new Error('Could not establish connection. Receiving end does not exist.');
+        }
         sentToTab.push(plain(message));
         return message.type === 'SCOPOS_SCAN' ? scan : { ok: true };
       },
@@ -69,15 +74,15 @@ function makeWorld({ stored, fetchReply, scan, demoProxyUrl = '' }) {
     const keepOpen = listener(message, sender, (response) => resolve(plain(response)));
     if (!keepOpen) resolve('ignored');
   });
-  // A page load in tab 7: 'loading', then 'complete', then wait out the settle delay.
+  // A page load in tab 7: 'loading', then 'complete' (sometimes twice), then wait out the settle delay.
   const navigate = async (tabId = 7) => {
     onUpdated(tabId, { status: 'loading' });
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    onUpdated(tabId, { status: 'complete' });
     onUpdated(tabId, { status: 'complete' });
     await new Promise((resolve) => setTimeout(resolve, 900));
   };
   const fromTab = (message, tabId = 7) => listener(message, { id: 'ext', tab: { id: tabId } }, () => {});
-  return { guide, sentToTab, requests, navigate, fromTab, badges, access, sessionStore };
+  return { guide, sentToTab, requests, navigate, fromTab, badges, access, page, sessionStore };
 }
 
 const scan = {
@@ -198,7 +203,7 @@ const stepsReply = reply(200, {
   await new Promise((resolve) => setTimeout(resolve, 20));
 
   await world.navigate();
-  assert.equal(world.requests.length, 2, 'the new page gets its own plan');
+  assert.equal(world.requests.length, 2, 'the new page gets exactly one plan, even with two complete events');
   const second = world.requests[1].body.messages[0].content;
   assert.match(second, /earlier pages in this walkthrough:/);
   assert.match(second, /1\. Open the Exams link\. 2\. Click Register\./);
@@ -206,22 +211,34 @@ const stepsReply = reply(200, {
   assert.match(second, /goal: apply for exams$/);
   assert.deepEqual(world.sentToTab.slice(-3).map((m) => m.type), ['SCOPOS_SCAN', 'SCOPOS_THINKING', 'SCOPOS_START']);
 
+  // 'complete' while the guided page is still the same document (its overlay answers): nothing to do.
+  world.page.sameDocument = true;
+  await world.navigate();
+  assert.equal(world.requests.length, 2, 'no new plan for the same page');
+  world.page.sameDocument = false;
+
+  // The last step was clicked and the app redrew in place: the overlay asks for a fresh look.
+  world.fromTab({ type: 'SCOPOS_RESCAN' });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(world.requests.length, 3, 'a rescan plans the redrawn page');
+  assert.match(world.requests[2].body.messages[0].content, /earlier pages in this walkthrough:/);
+
   // A page Scopos can't open: the icon badge asks for a click, and the popup's click continues.
   world.access.allowed = false;
   await world.navigate();
-  assert.equal(world.requests.length, 2);
+  assert.equal(world.requests.length, 3);
   assert.equal(world.badges[7], '→');
   assert.deepEqual(await world.guide({ type: 'SCOPOS_STATUS', tabId: 7 }), { waiting: true, goal: 'apply for exams' });
   world.access.allowed = true;
   assert.equal((await world.guide({ type: 'SCOPOS_CONTINUE', tabId: 7 })).ok, true);
-  assert.equal(world.requests.length, 3);
+  assert.equal(world.requests.length, 4);
   assert.equal(world.badges[7], '');
 
   // Stop on the page ends it: the next page load stays quiet.
   world.fromTab({ type: 'SCOPOS_END' });
   await new Promise((resolve) => setTimeout(resolve, 20));
   await world.navigate();
-  assert.equal(world.requests.length, 3);
+  assert.equal(world.requests.length, 4);
   assert.deepEqual(await world.guide({ type: 'SCOPOS_STATUS', tabId: 7 }), { waiting: false, goal: '' });
 
   // A guide idle for more than 10 minutes doesn't wake up on the next page load.

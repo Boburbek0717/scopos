@@ -22,6 +22,8 @@
   ].join(',');
   const AUTO_ACTIONS = new Set(['click', 'type', 'select']);
   const FLY_MS = 650;
+  // After the last step's click, wait this long for a new page before looking at this one again.
+  const RESCAN_DELAY_MS = 1500;
   const CURSOR_TIP = 2.5; // the triangle's tip sits 2.5px in from the cursor box's corner
   const EDGE = 12;
   const GAP = 14;
@@ -50,6 +52,7 @@
     raf: 0,
     lastPoint: null,
     dismissed: false,
+    leaving: false, // a new page is loading in this tab
   };
 
   // ── Scanning ──────────────────────────────────────────────────────────
@@ -207,7 +210,7 @@
       ui.card.addEventListener(type, (event) => event.stopPropagation());
     }
     ui.stop.addEventListener('click', endGuide);
-    ui.next.addEventListener('click', () => nextStep(false));
+    ui.next.addEventListener('click', nextStep);
     ui.auto.addEventListener('click', autoClick);
 
     state.ui = ui;
@@ -362,15 +365,27 @@
     }, reducedMotion() ? 0 : FLY_MS);
   }
 
-  function nextStep(afterAutoClick) {
+  function nextStep() {
     if (state.index >= state.steps.length - 1) {
-      // Done ends the guide. An auto-click on the last step usually opens the
-      // next page, so keep the guide alive for the service worker to resume.
-      if (afterAutoClick) teardown();
-      else endGuide();
+      endGuide();
       return;
     }
     goTo(state.index + 1);
+  }
+
+  // The highlighted element was clicked, by the user or by Auto-Click.
+  function targetClicked() {
+    if (state.index < state.steps.length - 1) {
+      goTo(state.index + 1);
+      return;
+    }
+    // Last step. Usually a new page loads and the service worker picks the guide
+    // up there. Apps that redraw in place keep this page, so look at it again.
+    teardown();
+    const token = state.token;
+    setTimeout(() => {
+      if (!state.leaving && token === state.token) notifyBackground({ type: 'SCOPOS_RESCAN' });
+    }, RESCAN_DELAY_MS);
   }
 
   function autoClick() {
@@ -384,8 +399,7 @@
       return;
     }
     if (step.actionType === 'type') return; // the user types the text themselves
-    el.click();
-    nextStep(true);
+    el.click(); // the click listener below moves the guide on
   }
 
   // ── Layout loop ───────────────────────────────────────────────────────
@@ -464,6 +478,15 @@
     if (event.key === 'Escape' && state.ui) endGuide();
   }, true);
 
+  // Clicking the highlighted element yourself counts as doing the step.
+  document.addEventListener('click', (event) => {
+    const step = state.steps[state.index];
+    if (!state.ui || !state.target || step?.actionType !== 'click') return;
+    if (event.target instanceof Node && state.target.contains(event.target)) targetClicked();
+  }, true);
+
+  window.addEventListener('beforeunload', () => { state.leaving = true; });
+
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     switch (message?.type) {
       case 'SCOPOS_SCAN':
@@ -481,6 +504,10 @@
       case 'SCOPOS_ERROR':
         showError(message.message);
         sendResponse({ ok: true });
+        break;
+      case 'SCOPOS_PING':
+        // Lets the service worker tell a new page (no answer) from this one.
+        sendResponse({ alive: true });
         break;
       case 'SCOPOS_STOP':
         teardown();
