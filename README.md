@@ -109,7 +109,27 @@ No dependencies and no build step:
 node scripts/test-extension.mjs
 ```
 
-It runs the service worker with a fake Chrome API and fake Claude replies (request shape, step clean-up, errors, multi-page guides, the badge fallback, the page limit and the timeout), and checks that the demo server rejects anything that isn't a Scopos request.
+It runs the service worker with a fake Chrome API and fake Claude replies (request shape, step clean-up, errors, multi-page guides, new tabs, the badge fallback, the page limit and the timeout), and checks that the demo server rejects anything that isn't a Scopos request.
+
+**End to end in real Chrome:** loads the extension into a throwaway Chrome profile, serves a small three-page portal on localhost, and checks that a real guide (through the demo server) follows Home → Apply → Exam registration on its own:
+
+```bash
+npm install --no-save puppeteer-core@24.15.0
+node scripts/e2e-chrome.mjs
+```
+
+Set `CHROME_PATH` if Chrome isn't in the default Windows location. One run uses about a cent of API credit.
+
+## Built with
+
+| Tool | Used for |
+|---|---|
+| Chrome Extensions, Manifest V3 | The extension: plain HTML, CSS and JavaScript, no build step |
+| Claude API (Claude Haiku 5.5 by default; Sonnet 5.5 and Opus 5.5 optional) | Planning the steps, with structured output |
+| Cloudflare Workers and Wrangler | The demo server that holds the API key |
+| Claude Code (Anthropic's AI coding assistant) | Helped write the code, tests and documentation |
+| Puppeteer | The end-to-end test in real Chrome |
+| Node.js | Running the tests |
 
 ## Known limits
 
