@@ -22,6 +22,7 @@ Goals to try:
 
 | Site | Goal |
 |---|---|
+| [Demo University portal](https://scopos-demo-portal.boburbek.workers.dev) | Register me for the Calculus I written exam |
 | python.org | Guide me to the page where I can download Python for Windows |
 | wikipedia.org | Take me to a random article |
 | github.com | How do I sign up? |
@@ -29,6 +30,8 @@ Goals to try:
 Scopos uses **Claude Haiku 5.5** by default, which answers in a few seconds. Sonnet 5.5 and Opus 5.5 are in the popup's model list if you want more careful answers.
 
 ### Demo portal
+
+**https://scopos-demo-portal.boburbek.workers.dev**
 
 [`demo-portal/`](demo-portal) is **Demo University**, a fictional student portal (plain HTML, no real data) built for this demo: busy menus, deadlines, quick links, and a full exam-registration flow. Open it, then ask Scopos:
 
